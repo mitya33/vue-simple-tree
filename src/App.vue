@@ -5,7 +5,6 @@
 		:fetchEndpoint='fetchEndpoint'
 		:data_='data'
 		:preselected_='preselected'
-		:expandPreselected='false'
 		itemId='1'
 		:transformer='transformer'
 	/>

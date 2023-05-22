@@ -1,26 +1,27 @@
 <template>
   <ul :class='{isChild, noBullets}'>
-    <textarea v-if='!isChild'>{{[...selected]}}</textarea>
     <li v-for='item in data'>
-      <span>
-        <input type='checkbox' :value='item.id' :checked='checked.has(item.id)' @change='inputChange(item.id)' />
-        <span></span>
-      </span>
-      <label @click='toggleBranch(item.id)'>
-        <span v-html='item.text'></span>
-        <i v-show='loading.has(item.id)'></i>
-      </label>
-      <Vue-simple-tree
-        v-if='expanded.has(item.id)'
-        :key='childTreeKey'
-        v-bind='$props'
-        :data='childApiDataCache[item.id] || item.children'
-        :itemId='item.id'
-        :isChild='true'
-        @loadedData='loadedData'
-        @select='select'
-        @deselect='deselect'
-      />
+      <template v-if='filter(item.text)'>
+        <span>
+          <input type='checkbox' :value='item.id' :checked='checked.has(item.id)' @change='inputChange(item.id)' />
+          <span></span>
+        </span>
+        <label @click='toggleBranch(item.id)'>
+          <span v-html='item.text'></span>
+          <i v-show='loading.has(item.id)'></i>
+        </label>
+        <Vue-simple-tree
+          v-if='expanded.has(item.id)'
+          :key='childTreeKey'
+          v-bind='$props'
+          :data='childApiDataCache[item.id] || item.children'
+          :itemId='item.id'
+          :isChild='true'
+          @loadedData='loadedData'
+          @select='selected'
+          @deselect='deselected'
+        />
+      </template>
     </li>
   </ul>
 </template>
@@ -29,8 +30,9 @@
 
 //prep
 import { ref } from 'vue'
+import 'vfonts/Lato.css'
 const childTreeKey = ref(Math.random());
-const emit = defineEmits(['select', 'deselect', 'loadedData']);
+const emit = defineEmits(['selected', 'deselected', 'loadedData']);
 const childApiDataCache = ref({});
 
 //props
@@ -52,7 +54,7 @@ const props = defineProps({
   },
   transformer: {
     type: Function,
-    default(data) { return data.map(obj => ({text: obj.text, id: obj.id})); }
+    default(data) { return data.map(obj => ({text: obj.text, id: obj.id, children})); }
   },
   noBullets: {
     type: Boolean,
@@ -68,48 +70,57 @@ const props = defineProps({
 });
 
 //state for expanded/checked/loading/selected branches
-const selected = ref(new Set(props.preselected));
+const allSelected = ref(new Set(props.preselected));
 const checked = ref(new Set(props.preselected));
 const expanded = ref(new Set(!props.expandPreselected ? [] : props.preselected));
 const loading = ref(new Set());
 
 //de/select/expand/collapse items
 const select = id => {
-  emit('select', id, selected.value)
   checked.value.add(id);
   toggleBranch(id);
-  if (!props.isChild) selected.value.add(id);
+  if (!props.isChild) allSelected.value.add(id);
 }
 const deselect = id => {
-  emit('deselect', id, selected.value);
   childTreeKey.value = Math.random();
   checked.value.delete(id);
-  if (!props.isChild) selected.value.delete(id);
+  if (!props.isChild) allSelected.value.delete(id);
 }
+const selected = id => emit('selected', id, allSelected.value);
+const deselected = id => emit('deselected', id, allSelected.value);
 const inputChange = id => !checked.value.has(id) ? select(id) : deselect(id);
 const toggleBranch = id => {
-  if (!expanded.value.has(id) && !childApiDataCache.value[id]) loading.value.add(id);
+  if (!expanded.value.has(id) && !props.data) loading.value.add(id);
   expanded.value[!expanded.value.has(id) ? 'add' : 'delete'](id);
 }
+
+//data filter
+const filter = text =>
+  !props.filter ||
+  (typeof props.filter == 'string' && ((!props.invertFilter && text.includes(props.filter)) || (props.invertFilter && !text.includes(props.filter)))) ||
+  (props.filter instanceof RegExp && ((!props.invertFilter && props.filter.test(text)) || props.invertFilter && !props.filter.test(text))) ||
+  (typeof props.filter == 'function' && props.filter(text))
 
 //data - passed statically, or fetch from web service
 const data = ref([]);
 if (!props.data) {
-  const url = props.apiDomain+'/'+props.fetchEndpoint.uri.replace('{id}', props.itemId);
-  setTimeout(() => 
-    fetch(url, {
-      method: props.fetchEndpoint.method || 'GET',
-      body: !props.fetchEndpoint.body ? null : props.fetchEndpoint.body.replace('{id}', props.itemId),
-      headers: props.fetchEndpoint.headers
-    })
-      .then(resp => resp.json())
-      .then(obj => {
-        if (props.isChild) emit('loadedData', props.itemId, obj);
-        data.value = props.transformer(obj);
+  if (props.apiDomain && props.fetchEndpoint) {
+    const url = props.apiDomain+'/'+props.fetchEndpoint.uri.replace('{id}', props.itemId);
+    setTimeout(() => 
+      fetch(url, {
+        method: props.fetchEndpoint.method || 'GET',
+        body: !props.fetchEndpoint.body ? null : props.fetchEndpoint.body.replace('{id}', props.itemId),
+        headers: props.fetchEndpoint.headers
       })
-      .catch((e) => console.log(`Failed to get data from "${url}"`)),
-    props.isChild ? props.throttle * 1000 : 0
-  );
+        .then(resp => resp.json())
+        .then(obj => {
+          if (props.isChild) emit('loadedData', props.itemId, obj);
+          data.value = props.transformer(obj);
+        })
+        .catch((e) => console.log(`Failed to get data from "${url}"`)),
+      props.isChild ? props.throttle * 1000 : 0
+    );
+  }
 } else
   data.value = props.transformer(props.data);
 
@@ -124,6 +135,7 @@ const loadedData = (childBranchId, data) => {
 <style scoped>
 
 /* tree (<ul>) */
+ul { font-family: v-sans; }
 ul.noBullets { list-style: none; }
 ul:not(.isChild).noBullets { padding: 0; }
 ul.isChild { padding-left: 25px; border-left: solid 1px #ccc; margin-left: 10px; margin-top: 4px; }
