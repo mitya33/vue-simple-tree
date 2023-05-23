@@ -1,13 +1,15 @@
 <template>
-	<Vue-simple-tree
-		class='foo'
-		:apiDomain='apiDomain'
-		:fetchEndpoint='fetchEndpoint'
-		:data_='data'
-		:preselected_='preselected'
-		itemId='1'
-		:transformer='transformer'
-	/>
+	<div style='width: 200px'>
+		<Vue-simple-tree
+			mode='field'	
+			:fetchEndpoint='fetchEndpoint'
+			:data='data'
+			:preselected='preselected'
+			:expandPreselected='true'
+			itemId='1'
+			:transformer='transformer'
+		/>
+	</div>
 </template>
 
 <script setup>
@@ -18,20 +20,26 @@ const fetchEndpoint = {
 	uri: 'posts?userId={id}'
 };
 const transformer = data => data.map(obj => ({text: obj.title, id: obj.id, children: obj.children}));
-const preselected = [1, '2b', 3];
+const preselected = [1, '1b', '1c'];
 const data = [{
+	title: 'Zero',
+	id: 0
+},{
 	title: 'One',
 	id: 1,
 	children: [{
-		title: 'Two A',
-		id: '2a',
+		title: 'One A',
+		id: '1a',
 	}, {
-		title: 'Two B',
-		id: '2b',
+		title: 'One B',
+		id: '1b',
 		children: [{
-			title: 'Three',
-			id: 3
+			title: 'One C',
+			id: '1c'
 		}]
 	}
-]}]
+]}, {
+	title: 'Three',
+	id: 3
+}]
 </script>
