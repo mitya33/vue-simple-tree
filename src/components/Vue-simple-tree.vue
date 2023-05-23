@@ -3,36 +3,40 @@
     <div v-if='!isChild && mode != "default"' class='tags-and-filter-cntr'>
       <component :is='hideTree ? AngleDown : AngleUp' @click='hideTree = !hideTree' />
       <div class='tags-area' :contenteditable='mode == "filter"'>
-        <span v-for='item in allSelected'>
-          {{item}}
+        <span v-for='item in thisTreeStore.selected'>
+          foo
           <a @click='deselect(item)'>&times;</a>
         </span>
       </div>
     </div>
     <div class='tree-cntr' v-show='!hideTree'>
       <ul :class='{isChild, noBullets}'>
-        <li v-for='item in data'>
+        <li :data-id='item.id' v-for='item in data'>
           <template v-if='filter(item.text)'>
             <span>
-              <input type='checkbox' :value='item.id' :checked='checked.has(item.id)' @change='inputChange(item.id)' />
+              <input
+                type='checkbox'
+                :value='item.id'
+                :checked='thisTreeStore.selected.has(item.id)'
+                @change='toggleInput(item.id)'
+              />
               <span></span>
             </span>
             <label @click='toggleBranch(item.id)'>
-              <span v-html='item.text'></span>
+              <span class='branch-text' v-html='item.text'></span>
               <span class='icons'>
                 <Spinner class='loading' v-show='loading.has(item.id)' />
               </span>
             </label>
             <Vue-simple-tree
-              v-if='expanded.has(item.id)'
+              v-if='thisTreeStore.expanded.has(item.id)'
               v-bind='$props'
               :data='childApiDataCache[item.id] || item.children'
               :itemId='item.id'
               :isChild='true'
               :deselectAll='deselectAllChildren'
               @loadedData='loadedData'
-              @select='childSelected'
-              @deselect='childDeselected'
+              @childSelected='select'
             />
           </template>
         </li>
@@ -45,12 +49,22 @@
 
 //prep
 import { ref, watch, nextTick } from 'vue'
+import store from '../store.js'
 import 'vfonts/Lato.css'
 import { Spinner, AngleDown, AngleUp } from '@vicons/fa'
-const emit = defineEmits(['select', 'deselect', 'loadedData']);
+const emit = defineEmits(['childSelected', 'loadedData']);
 const childApiDataCache = ref({});
 const deselectAllChildren = ref(false);
 const hideTree = ref(!props.isChild && props.mode != 'default');
+const loading = ref(new Set());
+const deselectAll = ref(props.deselectAll);
+
+//log manual data in store
+store.value[props.itemId] = {
+  selected: new Set(props.preselected),
+  expanded: new Set(!props.expandPreselected ? null : props.preselected)
+};
+const thisTreeStore = store.value[props.itemId];
 
 //props
 const props = defineProps({
@@ -89,59 +103,37 @@ const props = defineProps({
   },
   filter: [String, RegExp, Function],
   invertFilter: Boolean,
-  deselectAll: [Boolean, Number, String]
+  deselectAll: Boolean
 });
-
-//state for expanded/checked/loading branches
-const checked = ref(new Set(props.preselected));
-const expanded = ref(new Set(!props.expandPreselected ? [] : props.preselected));
-const loading = ref(new Set());
-const allSelected = ref(new Set(props.preselected));
 
 //select item
 const select = id => {
-  checked.value.add(id);
-  allSelected.value.add(id);
-  emit('select', id, props.itemId); 
-  if (!expanded.value.has(id)) toggleBranch(id);
+  thisTreeStore.selected.add(id);
+  if (!thisTreeStore.expanded.has(id)) toggleBranch(id);
+  emit('childSelected', props.itemId);
 }
 
-//deselect item (via tree)
+//deselect item, or all (via tree)
 const deselect = id => {
-  checked.value.delete(id);
-  allSelected.value.delete(id);
-  deselDescendants(id);
-  emit('deselect', id, props.itemId);
+  id && thisTreeStore.selected.delete(id);
+  !id && thisTreeStore.selected.clear();
+  deselectAllChildren.value = true;
+  nextTick(() => deselectAllChildren.value = false);
 }
 
-//toggle expand/collapse branch
+//event - toggle expand/collapse branch
 const toggleBranch = id => {
-  if (!expanded.value.has(id) && !props.data) loading.value.add(id);
-  expanded.value[!expanded.value.has(id) ? 'add' : 'delete'](id);
+  if (!thisTreeStore.expanded.has(id) && !props.data) loading.value.add(id);
+  thisTreeStore.expanded[!thisTreeStore.expanded.has(id) ? 'add' : 'delete'](id);
 }
 
-//event - input change
-const inputChange = id => !checked.value.has(id) ? select(id) : deselect(id);
+//event - toggle de/select branch
+const toggleInput = id => !thisTreeStore.selected.has(id) ? select(id) : deselect(id);
 
-//event - child selected
-const childSelected = (id, parentId) => {
-  checked.value.add(parentId);
-  allSelected.value.add(id);
-  emit('select', parentId, props.itemId);
-}
-
-//event - child deselected
-const childDeselected = (id, parentId) => {
-  allSelected.value.delete(id);
-  emit('deselect', parentId, props.itemId);
-}
-
-//on parent deselect, deselect children/descendants
-watch(() => props.deselectAll, val => {
-  if (val === props.itemId || val === true) {
-    checked.value.clear();
-    deselDescendants(true);
-  }
+//watch - for parent deselect - deselect all children/descendents
+watch(() => props.deselectAll, () => {
+  deselect();
+  deselectAll.value = false;
 });
 
 //data filter
@@ -183,12 +175,6 @@ function getRequestSetup(endpoint) {
     const url = `${props.apiDomain}/${uri}`;
     const config = !obj.config ? {} : (typeof obj.config == 'object' ? obj.config : obj.config(props.itemId));
     return {url, config};
-}
-
-//util - deselect child/descendants
-function deselDescendants(filter) {
-  deselectAllChildren.value = filter;
-  nextTick(() => deselectAllChildren.value = false);
 }
 
 </script>
