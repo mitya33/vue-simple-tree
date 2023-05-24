@@ -1,7 +1,8 @@
 <template>
-	<div style='width: 200px'>
+	<div>
 		<Vue-simple-tree
-			mode='field'	
+			mode='field'
+			:filter='true'
 			:fetchEndpoint='fetchEndpoint'
 			:data='data'
 			:preselected_='preselected'
@@ -43,3 +44,11 @@ const data = [{
 	id: 3
 }]
 </script>
+
+<style scoped>
+div { width: 200px; margin: 5rem; }
+</style>
+
+<style>
+@import './assets/tooltips.css'
+</style>

@@ -1,0 +1,28 @@
+.tt {
+	position: absolute;
+	background: #333;
+	color: white;
+	font-weight: normal;
+	padding: 6px 8px;
+	z-index: 100000;
+	font-style: normal;
+	white-space: nowrap;
+}
+.tt.left { left: 0; }
+.tt.right { right: 0; }
+.tt.bottom { top: 34px; }
+.tt.top { bottom: 34px; }
+.tt::before {
+	content: '';
+	display: block;
+	position: absolute;
+	height: 8px;
+	width: 8px;
+	background: inherit;
+	transform: rotate(45deg);
+}
+.tt.left::before { left: 10px; }
+.tt.right::before { right: 10px; }
+.tt.top::before { bottom: calc(-8px / 2); }
+.tt.bottom::before { top: calc(-8px / 2); }
+*:not(:hover) > .tt, .tt.manual { display: none; }

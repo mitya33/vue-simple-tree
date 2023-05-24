@@ -1,47 +1,51 @@
 <template>
   <div :class='["outer-cntr", mode+"-mode", "parent-"+itemId, {isChild, root: !isChild}]'>
-    <div v-if='!isChild && mode != "default"' class='tags-and-filter-cntr'>
-      <component :is='hideTree ? AngleDown : AngleUp' @click='hideTree = !hideTree' />
-      <div class='tags-area' :contenteditable='mode == "filter"'>
-        <span v-for='id in globalSelected'>
+    <div v-if='!isChild && mode == "field"' class='tags-and-filter-cntr' @click='hideTree = !hideTree'>
+      <component :is='hideTree ? AngleDown : AngleUp' />
+      <div class='tags-area'>
+        <span v-for='id in globalSelected' @click.stop>
+          <em class='tt top centre'>{{branchPath(id)}}</em>
           <template v-if='tree'>{{branchText(id)}}</template>
           <a @click='deleteTag(id)'>&times;</a>
         </span>
       </div>
     </div>
     <div class='tree-cntr' v-show='!hideTree'>
+      <input v-if='!isChild && data && $props.filter === true' v-model='searchTerm' placeholder='filter...'>
       <ul ref='tree' :class='{isChild, noBullets}'>
-        <li :data-id='item.id' v-for='item in data'>
-          <template v-if='filter(item.text)'>
-            <span>
-              <input
-                type='checkbox'
-                :value='item.id'
-                :checked='thisTreeStore.selected.has(item.id)'
-                @change='toggleInput(item.id)'
-              />
-              <span></span>
-            </span>
-            <label @click='toggleBranch(item.id)'>
-              <span class='branch-text' v-html='item.text'></span>
-              <span class='icons'>
-                <Spinner class='loading' v-show='loading.has(item.id)' />
+        <template v-for='item in data'>
+          <li :data-id='item.id' :class='{searchMatch: searchTerm && item.text.includes(searchTerm)}'>
+            <template v-if='filter(item.text)'>
+              <span>
+                <input
+                  type='checkbox'
+                  :value='item.id'
+                  :checked='thisTreeStore.selected.has(item.id)'
+                  @change='toggleInput(item.id)'
+                />
+                <span></span>
               </span>
-            </label>
-            <Vue-simple-tree
-              v-if='thisTreeStore.expanded.has(item.id)'
-              v-bind='$props'
-              :data='childApiDataCache[item.id] || item.children'
-              :itemId='item.id'
-              :isChild='true'
-              :deselectAll='deselectAllChildren'
-              @loadedData='loadedData'
-              @childSelected='select'
-              @addToGlobalSelected='local_addToGlobalSelected'
-              @deleteFromGlobalSelected='local_deleteFromGlobalSelected'
-            />
-          </template>
-        </li>
+              <label @click='toggleBranch(item.id)'>
+                <span class='branch-text' v-html='item.text'></span>
+                <span class='icons'>
+                  <Spinner class='loading' v-show='loading.has(item.id)' />
+                </span>
+              </label>
+              <Vue-simple-tree
+                v-if='thisTreeStore.expanded.has(item.id) || searchTerm'
+                v-bind='$props'
+                :data='childApiDataCache[item.id] || item.children'
+                :itemId='item.id'
+                :isChild='true'
+                :deselectAll='deselectAllChildren'
+                @loadedData='loadedData'
+                @childSelected='select'
+                @addToGlobalSelected='local_addToGlobalSelected'
+                @deleteFromGlobalSelected='local_deleteFromGlobalSelected'
+              />
+            </template>
+          </li>
+        </template>
       </ul>
     </div>
   </div>
@@ -51,8 +55,9 @@
 
 //prep
 import { ref, watch, nextTick } from 'vue'
-import { tagDeleted, globalSelected, addToGlobalSelected, deleteFromGlobalSelected } from '../store'
+import { tagDeleted, globalSelected, addToGlobalSelected, deleteFromGlobalSelected, searchTerm } from '../store'
 import 'vfonts/Lato.css'
+import 'vfonts/FiraCode.css'
 import { Spinner, AngleDown, AngleUp } from '@vicons/fa'
 const emit = defineEmits(['childSelected', 'loadedData', 'addToGlobalSelected', 'deleteFromGlobalSelected']);
 const childApiDataCache = ref({});
@@ -97,7 +102,7 @@ const props = defineProps({
     type: Number,
     default: .5
   },
-  filter: [String, RegExp, Function],
+  filter: [Boolean, String, RegExp, Function],
   invertFilter: Boolean,
   deselectAll: [String, Number, Boolean]
 });
@@ -116,8 +121,17 @@ const thisTreeStore = ref({
 const local_addToGlobalSelected = id => addToGlobalSelected(id, emit);
 const local_deleteFromGlobalSelected = id => deleteFromGlobalSelected(id, emit);
 
-//get branch text for tag
+//get branch text/path for tag
 const branchText = id => tree.value.querySelector(`[data-id='${id}'] label .branch-text`).textContent;
+const branchPath = id => {
+  const ret = [];
+  let el = tree.value.querySelector(`[data-id='${id}']`);
+  while(!el.matches('.outer-cntr.root')) {
+    el.tagName == 'LI' && ret.push(el.querySelector('.branch-text').textContent);
+    el = el.parentNode;
+  }
+  return ret.reverse().join(' > ');
+}
 
 //delete tag
 const deleteTag = id => {
@@ -167,12 +181,13 @@ watch(() => props.deselectAll, val => {
 //watch - for tag being deleted (corresponding branch could be at any level)
 watch(tagDeleted, id => id !== false && thisTreeStore.value.selected.has(id) && deselect(id));
 
-//data filter
+//filter manual data?
 const filter = text =>
-  !props.filter ||
-  (typeof props.filter == 'string' && ((!props.invertFilter && text.includes(props.filter)) || (props.invertFilter && !text.includes(props.filter)))) ||
-  (props.filter instanceof RegExp && ((!props.invertFilter && props.filter.test(text)) || props.invertFilter && !props.filter.test(text))) ||
-  (typeof props.filter == 'function' && props.filter(text))
+    !props.filter ||
+    props.filter === true ||
+    (typeof props.filter == 'string' && ((!props.invertFilter && text.includes(props.filter)) || (props.invertFilter && !text.includes(props.filter)))) ||
+    (props.filter instanceof RegExp && ((!props.invertFilter && props.filter.test(text)) || props.invertFilter && !props.filter.test(text))) ||
+    (typeof props.filter == 'function' && props.filter(text))
 
 //data - passed statically, or fetch from web service
 const data = ref([]);
@@ -212,20 +227,26 @@ function getRequestSetup(endpoint) {
 
 <style scoped>
 
+* { box-sizing: border-box; }
+
+/* tooltips */
+.tt { color: #aaa; font-family: v-mono; font-size: 13px; line-height: 16px; }
+
 /* top-level container */
 .outer-cntr { font-family: v-sans; font-size: 14.5px; color: #333; position: relative; }
 
+
 /* tags/filter container */
 .tags-and-filter-cntr { position: relative; }
-.tags-and-filter-cntr > svg { cursor: pointer; position: absolute; right: 4px; top: 9px; }
+.tags-and-filter-cntr > svg { cursor: pointer; position: absolute; right: 4px; top: 7px; }
 .tags-area { padding: 6px; background: #fff; min-height: 20px; border: solid 1px #ccc; }
+.tags-area:empty::before { content: '(No items selected)'; font-size: 13px; color: #999; }
 .tags-area span {
   display: inline-block;
   border-radius: 4px;
   background: #f9dc60;
   border: solid 1px #cab55f;
   padding: 3px 6px;
-  font-size: 13px;
   position: relative;
   cursor: default;
 }
@@ -250,7 +271,18 @@ function getRequestSetup(endpoint) {
 .tags-area span:hover a { display: block; }
 
 /* tree container */
-.root > .tree-cntr { position: absolute; background: #eee; width: 100%; }
+.root > .tree-cntr { position: absolute; width: 100%; }
+.root.field-mode > .tree-cntr { background: #eee; }
+
+/* tree filter */
+.tree-cntr > input {
+  outline: none;
+  display: block;
+  width: calc(100% - (8px * 2));
+  padding: 4px;
+  margin: 8px auto 0 auto;
+}
+.field-mode .tree-cntr > input { border: none; }
 
 /* tree (<ul>) */
 ul { margin: 0; }
@@ -264,6 +296,17 @@ li { position: relative; top: -4px; }
 
 /* branch label */
 label { cursor: pointer; }
+.branch-text { position: relative; z-index: 1; }
+.searchMatch > label > .branch-text::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: calc(100% + (4px * 2));
+  height: calc(100% + (4px * 2));
+  background: #f7f79e;
+  z-index: -1;
+}
 
 /* checkbox contianer */
 li > span {

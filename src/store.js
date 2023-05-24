@@ -9,3 +9,4 @@ export const deleteFromGlobalSelected = (id, emit) => {
   emit('deleteFromGlobalSelected', id);
 }
 export const tagDeleted = ref(null);
+export const searchTerm = ref(null);
