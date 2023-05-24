@@ -4,7 +4,7 @@
 			mode='field'	
 			:fetchEndpoint='fetchEndpoint'
 			:data='data'
-			:preselected='preselected'
+			:preselected_='preselected'
 			:expandPreselected='true'
 			itemId='1'
 			:transformer='transformer'

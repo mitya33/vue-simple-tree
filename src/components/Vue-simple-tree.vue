@@ -3,9 +3,9 @@
     <div v-if='!isChild && mode != "default"' class='tags-and-filter-cntr'>
       <component :is='hideTree ? AngleDown : AngleUp' @click='hideTree = !hideTree' />
       <div class='tags-area' :contenteditable='mode == "filter"'>
-        <span v-for='item in globalSelected'>
-          <template v-if='tree'>{{branchText(item)}}</template>
-          <a @click='deselect(item)'>&times;</a>
+        <span v-for='id in globalSelected'>
+          <template v-if='tree'>{{branchText(id)}}</template>
+          <a @click='deleteTag(id)'>&times;</a>
         </span>
       </div>
     </div>
@@ -37,8 +37,8 @@
               :deselectAll='deselectAllChildren'
               @loadedData='loadedData'
               @childSelected='select'
-              @deleteFromGlobalSelected='deleteFromGlobalSelected'
-              @addToGlobalSelected='addToGlobalSelected'
+              @addToGlobalSelected='local_addToGlobalSelected'
+              @deleteFromGlobalSelected='local_deleteFromGlobalSelected'
             />
           </template>
         </li>
@@ -51,7 +51,7 @@
 
 //prep
 import { ref, watch, nextTick } from 'vue'
-import { store, selected } from '../store'
+import { tagDeleted, globalSelected, addToGlobalSelected, deleteFromGlobalSelected } from '../store'
 import 'vfonts/Lato.css'
 import { Spinner, AngleDown, AngleUp } from '@vicons/fa'
 const emit = defineEmits(['childSelected', 'loadedData', 'addToGlobalSelected', 'deleteFromGlobalSelected']);
@@ -112,20 +112,18 @@ const thisTreeStore = ref({
   selected: new Set(preselected),
   expanded: new Set(!props.expandPreselected ? null : preselected)
 });
-const globalSelected = ref(new Set(props.preselected));
 
-//add to/remove from global selected store
-const addToGlobalSelected = id => {
-  globalSelected.value.add(id);
-  emit('addToGlobalSelected', id);
-}
-const deleteFromGlobalSelected = id => {
-  globalSelected.value.delete(id);
-  emit('deleteFromGlobalSelected', id);
-}
+const local_addToGlobalSelected = id => addToGlobalSelected(id, emit);
+const local_deleteFromGlobalSelected = id => deleteFromGlobalSelected(id, emit);
 
 //get branch text for tag
 const branchText = id => tree.value.querySelector(`[data-id='${id}'] label .branch-text`).textContent;
+
+//delete tag
+const deleteTag = id => {
+  tagDeleted.value = id;
+  nextTick(() => tagDeleted.value = false);
+}
 
 //select item
 const select = id => {
@@ -165,6 +163,9 @@ watch(() => props.deselectAll, val => {
     deselectAll.value = false;
   }
 });
+
+//watch - for tag being deleted (corresponding branch could be at any level)
+watch(tagDeleted, id => id !== false && thisTreeStore.value.selected.has(id) && deselect(id));
 
 //data filter
 const filter = text =>
