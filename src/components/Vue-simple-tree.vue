@@ -1,16 +1,16 @@
 <template>
-  <div :class='["outer-cntr", mode+"-mode", {isChild, root: !isChild}]'>
+  <div :class='["outer-cntr", mode+"-mode", "parent-"+itemId, {isChild, root: !isChild}]'>
     <div v-if='!isChild && mode != "default"' class='tags-and-filter-cntr'>
       <component :is='hideTree ? AngleDown : AngleUp' @click='hideTree = !hideTree' />
       <div class='tags-area' :contenteditable='mode == "filter"'>
-        <span v-for='item in thisTreeStore.selected'>
-          foo
+        <span v-for='item in globalSelected'>
+          <template v-if='tree'>{{branchText(item)}}</template>
           <a @click='deselect(item)'>&times;</a>
         </span>
       </div>
     </div>
     <div class='tree-cntr' v-show='!hideTree'>
-      <ul :class='{isChild, noBullets}'>
+      <ul ref='tree' :class='{isChild, noBullets}'>
         <li :data-id='item.id' v-for='item in data'>
           <template v-if='filter(item.text)'>
             <span>
@@ -37,6 +37,8 @@
               :deselectAll='deselectAllChildren'
               @loadedData='loadedData'
               @childSelected='select'
+              @deleteFromGlobalSelected='deleteFromGlobalSelected'
+              @addToGlobalSelected='addToGlobalSelected'
             />
           </template>
         </li>
@@ -49,22 +51,16 @@
 
 //prep
 import { ref, watch, nextTick } from 'vue'
-import store from '../store.js'
+import { store, selected } from '../store'
 import 'vfonts/Lato.css'
 import { Spinner, AngleDown, AngleUp } from '@vicons/fa'
-const emit = defineEmits(['childSelected', 'loadedData']);
+const emit = defineEmits(['childSelected', 'loadedData', 'addToGlobalSelected', 'deleteFromGlobalSelected']);
 const childApiDataCache = ref({});
 const deselectAllChildren = ref(false);
 const hideTree = ref(!props.isChild && props.mode != 'default');
 const loading = ref(new Set());
 const deselectAll = ref(props.deselectAll);
-
-//log manual data in store
-store.value[props.itemId] = {
-  selected: new Set(props.preselected),
-  expanded: new Set(!props.expandPreselected ? null : props.preselected)
-};
-const thisTreeStore = store.value[props.itemId];
+const tree = ref(null);
 
 //props
 const props = defineProps({
@@ -103,37 +99,71 @@ const props = defineProps({
   },
   filter: [String, RegExp, Function],
   invertFilter: Boolean,
-  deselectAll: Boolean
+  deselectAll: [String, Number, Boolean]
 });
+
+//if manual data, filter to those items that pertain to this depth
+const preselected = !props.data || !props.preselected ?
+  null :
+  props.preselected.filter(id => props.data.find(obj => obj.id === id));
+
+//selected/expanded state stores
+const thisTreeStore = ref({
+  selected: new Set(preselected),
+  expanded: new Set(!props.expandPreselected ? null : preselected)
+});
+const globalSelected = ref(new Set(props.preselected));
+
+//add to/remove from global selected store
+const addToGlobalSelected = id => {
+  globalSelected.value.add(id);
+  emit('addToGlobalSelected', id);
+}
+const deleteFromGlobalSelected = id => {
+  globalSelected.value.delete(id);
+  emit('deleteFromGlobalSelected', id);
+}
+
+//get branch text for tag
+const branchText = id => tree.value.querySelector(`[data-id='${id}'] label .branch-text`).textContent;
 
 //select item
 const select = id => {
-  thisTreeStore.selected.add(id);
-  if (!thisTreeStore.expanded.has(id)) toggleBranch(id);
+  globalSelected.value.add(id);
+  thisTreeStore.value.selected.add(id);
+  if (!thisTreeStore.value.expanded.has(id)) toggleBranch(id);
   emit('childSelected', props.itemId);
+  emit('addToGlobalSelected', id);
 }
 
 //deselect item, or all (via tree)
 const deselect = id => {
-  id && thisTreeStore.selected.delete(id);
-  !id && thisTreeStore.selected.clear();
-  deselectAllChildren.value = true;
+  if (id !== undefined) {
+    thisTreeStore.value.selected.delete(id);
+    globalSelected.value.delete(id);
+  } else {
+    if (props.isChild) [...thisTreeStore.value.selected].forEach(id => emit('deleteFromGlobalSelected', id));
+    thisTreeStore.value.selected.clear();
+  }
+  deselectAllChildren.value = id ?? true;
   nextTick(() => deselectAllChildren.value = false);
 }
 
 //event - toggle expand/collapse branch
 const toggleBranch = id => {
-  if (!thisTreeStore.expanded.has(id) && !props.data) loading.value.add(id);
-  thisTreeStore.expanded[!thisTreeStore.expanded.has(id) ? 'add' : 'delete'](id);
+  if (!thisTreeStore.value.expanded.has(id) && !props.data) loading.value.add(id);
+  thisTreeStore.value.expanded[!thisTreeStore.value.expanded.has(id) ? 'add' : 'delete'](id);
 }
 
 //event - toggle de/select branch
-const toggleInput = id => !thisTreeStore.selected.has(id) ? select(id) : deselect(id);
+const toggleInput = id => !thisTreeStore.value.selected.has(id) ? select(id) : deselect(id);
 
 //watch - for parent deselect - deselect all children/descendents
-watch(() => props.deselectAll, () => {
-  deselect();
-  deselectAll.value = false;
+watch(() => props.deselectAll, val => {
+  if ([props.itemId, true].includes(val)) {
+    deselect();
+    deselectAll.value = false;
+  }
 });
 
 //data filter
