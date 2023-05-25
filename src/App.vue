@@ -2,8 +2,9 @@
 	<div>
 		<Vue-simple-tree
 			mode='field'
-			:filter='true'
-			:fetchEndpoint='fetchEndpoint'
+			:search='true'
+			:apiDomain_='apiDomain'
+			:fetchEndpoint_='fetchEndpoint'
 			:data='data'
 			:preselected_='preselected'
 			:expandPreselected='true'
@@ -46,7 +47,7 @@ const data = [{
 </script>
 
 <style scoped>
-div { width: 200px; margin: 5rem; }
+div { width: 500px; margin: 5rem; }
 </style>
 
 <style>

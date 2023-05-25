@@ -11,9 +11,9 @@
       </div>
     </div>
     <div class='tree-cntr' v-show='!hideTree'>
-      <input v-if='!isChild && data && $props.filter === true' v-model='searchTerm' placeholder='filter...'>
+      <input v-if='!isChild && $props.data && search' v-model='searchTerm' placeholder='filter...'>
       <ul ref='tree' :class='{isChild, noBullets}'>
-        <template v-for='item in data'>
+        <template v-for='item in treeData'>
           <li :data-id='item.id' :class='{searchMatch: searchTerm && item.text.includes(searchTerm)}'>
             <template v-if='filter(item.text)'>
               <span>
@@ -34,14 +34,14 @@
               <Vue-simple-tree
                 v-if='thisTreeStore.expanded.has(item.id) || searchTerm'
                 v-bind='$props'
-                :data='childApiDataCache[item.id] || item.children'
+                :data='childApiDataCache[item.id] || item.children || []'
                 :itemId='item.id'
                 :isChild='true'
                 :deselectAll='deselectAllChildren'
                 @loadedData='loadedData'
                 @childSelected='select'
-                @addToGlobalSelected='local_addToGlobalSelected'
-                @deleteFromGlobalSelected='local_deleteFromGlobalSelected'
+                @addToGlobalSelected='id => addToGlobalSelected(id, emit)'
+                @deleteFromGlobalSelected='id => deleteFromGlobalSelected(id, emit)'
               />
             </template>
           </li>
@@ -54,7 +54,7 @@
 <script setup>
 
 //prep
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, computed } from 'vue'
 import { tagDeleted, globalSelected, addToGlobalSelected, deleteFromGlobalSelected, searchTerm } from '../store'
 import 'vfonts/Lato.css'
 import 'vfonts/FiraCode.css'
@@ -62,7 +62,6 @@ import { Spinner, AngleDown, AngleUp } from '@vicons/fa'
 const emit = defineEmits(['childSelected', 'loadedData', 'addToGlobalSelected', 'deleteFromGlobalSelected']);
 const childApiDataCache = ref({});
 const deselectAllChildren = ref(false);
-const hideTree = ref(!props.isChild && props.mode != 'default');
 const loading = ref(new Set());
 const deselectAll = ref(props.deselectAll);
 const tree = ref(null);
@@ -102,10 +101,14 @@ const props = defineProps({
     type: Number,
     default: .5
   },
-  filter: [Boolean, String, RegExp, Function],
+  filter: [String, RegExp, Function],
+  search: Boolean,
   invertFilter: Boolean,
   deselectAll: [String, Number, Boolean]
 });
+
+//data mode - manual or API
+const dataMode = props.apiDomain && props.fetchEndpoint ? 'api' : 'manual';
 
 //if manual data, filter to those items that pertain to this depth
 const preselected = !props.data || !props.preselected ?
@@ -117,9 +120,6 @@ const thisTreeStore = ref({
   selected: new Set(preselected),
   expanded: new Set(!props.expandPreselected ? null : preselected)
 });
-
-const local_addToGlobalSelected = id => addToGlobalSelected(id, emit);
-const local_deleteFromGlobalSelected = id => deleteFromGlobalSelected(id, emit);
 
 //get branch text/path for tag
 const branchText = id => tree.value.querySelector(`[data-id='${id}'] label .branch-text`).textContent;
@@ -163,7 +163,7 @@ const deselect = id => {
 
 //event - toggle expand/collapse branch
 const toggleBranch = id => {
-  if (!thisTreeStore.value.expanded.has(id) && !props.data) loading.value.add(id);
+  if (!thisTreeStore.value.expanded.has(id) && dataMode == 'api') loading.value.add(id);
   thisTreeStore.value.expanded[!thisTreeStore.value.expanded.has(id) ? 'add' : 'delete'](id);
 }
 
@@ -184,29 +184,37 @@ watch(tagDeleted, id => id !== false && thisTreeStore.value.selected.has(id) && 
 //filter manual data?
 const filter = text =>
     !props.filter ||
-    props.filter === true ||
     (typeof props.filter == 'string' && ((!props.invertFilter && text.includes(props.filter)) || (props.invertFilter && !text.includes(props.filter)))) ||
     (props.filter instanceof RegExp && ((!props.invertFilter && props.filter.test(text)) || props.invertFilter && !props.filter.test(text))) ||
     (typeof props.filter == 'function' && props.filter(text))
 
-//data - passed statically, or fetch from web service
-const data = ref([]);
-if (!props.data) {
-  if (props.apiDomain && props.fetchEndpoint) {
-    const reqSetup = getRequestSetup('fetch');
-    setTimeout(() => 
-      fetch(reqSetup.url, reqSetup.config)
-        .then(resp => resp.json())
-        .then(obj => {
-          if (props.isChild) emit('loadedData', props.itemId, obj);
-          data.value = props.transformer(obj);
-        })
-        .catch((e) => console.log(`Failed to get data from "${url}"`)),
-      props.isChild ? props.throttle * 1000 : 0
-    );
-  }
-} else
-  data.value = props.transformer(props.data);
+//hide tree? Yes if is root tree and field mode (i.e. show only on activate dropdown) or if tree has no manual data
+const hideTree = ref(!props.isChild && props.mode == 'field');
+
+//data - passed manually, or fetch from web service
+const treeData = ref([]);
+const getData = new Promise(res => {
+  if (dataMode == 'api') {
+    if (props.apiDomain && props.fetchEndpoint) {
+      const reqSetup = getRequestSetup('fetch');
+      setTimeout(() => 
+        fetch(reqSetup.url, reqSetup.config)
+          .then(resp => resp.json())
+          .then(obj => {
+            if (props.isChild) emit('loadedData', props.itemId, obj);
+            res(obj);
+          })
+          .catch((e) => console.log(`Failed to get data from "${url}"`)),
+        props.isChild ? props.throttle * 1000 : 0
+      );
+    }
+  } else
+    res(props.data);
+});
+getData.then(data => {
+  treeData.value = props.transformer(data);
+  if (props.isChild) hideTree.value = false;
+});
 
 //child finished loading API data
 const loadedData = (childBranchId, data) => {
@@ -348,7 +356,7 @@ input[type=checkbox] {
 }
 
 /* branch icons/actions... */
-.icons { display: inline-block; position: relative; top: 3px; margin-left: 5px; }
+.icons { display: inline-block; position: relative; margin-left: 5px; }
 svg { width: 18px; height: 18px; }
 
 /* ...loading */
