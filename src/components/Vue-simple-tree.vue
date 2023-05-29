@@ -11,26 +11,33 @@
       </div>
     </div>
     <div class='tree-cntr' v-show='!hideTree'>
-      <input v-if='!isChild && $props.data && search' v-model='searchTerm' placeholder='filter...'>
+      <input v-if='!isChild && $props.data && search' v-model='searchTerm' placeholder='Search...'>
       <ul ref='tree' :class='{isChild, noBullets}'>
         <template v-for='item in treeData'>
           <li :data-id='item.id' :class='{searchMatch: searchTerm && item.text.includes(searchTerm)}'>
             <template v-if='filter(item.text)'>
-              <span>
-                <input
-                  type='checkbox'
-                  :value='item.id'
-                  :checked='thisTreeStore.selected.has(item.id)'
-                  @change='toggleInput(item.id)'
-                />
-                <span></span>
-              </span>
-              <label @click='toggleBranch(item.id)'>
-                <span class='branch-text' v-html='item.text'></span>
-                <span class='icons'>
-                  <Spinner class='loading' v-show='loading.has(item.id)' />
+              <div class='branch-bits'>
+                <span>
+                  <input
+                    type='checkbox'
+                    :value='item.id'
+                    :checked='thisTreeStore.selected.has(item.id)'
+                    @change='toggleInput(item.id)'
+                  />
+                  <span></span>
                 </span>
-              </label>
+                <label @click='toggleBranch(item.id)'>
+                  <span class='branch-text' v-html='item.text'></span>
+                  <span class='icons'>
+                    <Spinner class='loading' v-show='loading.has(item.id)' />
+                    <template v-if='admin'>
+                      <PlusCircle />
+                      <TrashAlt />
+                      <Copy />
+                    </template>
+                  </span>
+                </label>
+              </div>
               <Vue-simple-tree
                 v-if='thisTreeStore.expanded.has(item.id) || searchTerm'
                 v-bind='$props'
@@ -58,7 +65,7 @@ import { ref, watch, nextTick, computed } from 'vue'
 import { tagDeleted, globalSelected, addToGlobalSelected, deleteFromGlobalSelected, searchTerm } from '../store'
 import 'vfonts/Lato.css'
 import 'vfonts/FiraCode.css'
-import { Spinner, AngleDown, AngleUp } from '@vicons/fa'
+import { Spinner, AngleDown, AngleUp, PlusCircle, TrashAlt, Copy } from '@vicons/fa'
 const emit = defineEmits(['childSelected', 'loadedData', 'addToGlobalSelected', 'deleteFromGlobalSelected']);
 const childApiDataCache = ref({});
 const deselectAllChildren = ref(false);
@@ -104,15 +111,16 @@ const props = defineProps({
   filter: [String, RegExp, Function],
   search: Boolean,
   invertFilter: Boolean,
-  deselectAll: [String, Number, Boolean]
+  deselectAll: [String, Number, Boolean],
+  admin: Boolean
 });
 
 //data mode - manual or API
 const dataMode = props.apiDomain && props.fetchEndpoint ? 'api' : 'manual';
 
 //if manual data, filter to those items that pertain to this depth
-const preselected = !props.data || !props.preselected ?
-  null :
+const preselected = dataMode == 'api' || !props.preselected ?
+  props.preselected :
   props.preselected.filter(id => props.data.find(obj => obj.id === id));
 
 //selected/expanded state stores
@@ -246,9 +254,9 @@ function getRequestSetup(endpoint) {
 
 /* tags/filter container */
 .tags-and-filter-cntr { position: relative; }
-.tags-and-filter-cntr > svg { cursor: pointer; position: absolute; right: 4px; top: 7px; }
-.tags-area { padding: 6px; background: #fff; min-height: 20px; border: solid 1px #ccc; }
-.tags-area:empty::before { content: '(No items selected)'; font-size: 13px; color: #999; }
+.tags-and-filter-cntr > svg { cursor: pointer; position: absolute; right: 6px; top: 10px; }
+.tags-area { padding: 6px; background: #fff; height: 38px; border: solid 1px #ccc; }
+.tags-area:empty::before { content: '(No items selected)'; display: block; font-size: 13px; color: #999; margin-top: 4px; }
 .tags-area span {
   display: inline-block;
   border-radius: 4px;
@@ -280,16 +288,10 @@ function getRequestSetup(endpoint) {
 
 /* tree container */
 .root > .tree-cntr { position: absolute; width: 100%; }
-.root.field-mode > .tree-cntr { background: #eee; }
+.root.field-mode > .tree-cntr { background: #fff; border: solid 1px #ccc; border-top: none; }
 
-/* tree filter */
-.tree-cntr > input {
-  outline: none;
-  display: block;
-  width: calc(100% - (8px * 2));
-  padding: 4px;
-  margin: 8px auto 0 auto;
-}
+/* tree search */
+.tree-cntr > input { background: #eee; outline: none; display: block; max-width: 200px; width: calc(100% - (8px * 2)); padding: 5px; margin: 8px auto 0 auto; }
 .field-mode .tree-cntr > input { border: none; }
 
 /* tree (<ul>) */
@@ -297,39 +299,34 @@ ul { margin: 0; }
 ul.noBullets { list-style: none; }
 .root > .tree-cntr > ul { padding-left: 22px; }
 .root > .tree-cntr > ul.noBullets { padding: 10px; }
-ul.isChild { padding-left: 16px; border-left: solid 1px #ccc; margin-left: 10px; margin-top: 4px; }
+ul.isChild { padding-left: 16px; border-left: solid 1px #ccc; margin-left: 10px; }
 
 /* branch */
-li { position: relative; top: -4px; }
+li { margin-block: 3px; }
+.branch-bits { position: relative; width: fit-content; }
+.branch-bits::before { content: ''; position: absolute; left: -4px; top: -4px; width: calc(100% + (4px * 2)); height: calc(100% + (4px * 2)); border-radius: 4px; }
+.branch-bits:hover::before { background: #caffcd; }
+.searchMatch > .branch-bits::before { background: #fcfcaa; }
 
 /* branch label */
-label { cursor: pointer; }
+label { cursor: pointer; position: relative; top: 2px; }
 .branch-text { position: relative; z-index: 1; }
-.searchMatch > label > .branch-text::before {
-  content: '';
-  position: absolute;
-  left: -4px;
-  top: -4px;
-  width: calc(100% + (4px * 2));
-  height: calc(100% + (4px * 2));
-  background: #f7f79e;
-  z-index: -1;
-}
 
 /* checkbox contianer */
-li > span {
+.branch-bits > span {
   width: 19px;
   height: 19px;
   display: inline-block;
   position: relative;
-  top: 4px;
   margin-right: 6px;
   text-align: center;
+  vertical-align: middle;
 }
 
 /* checkbox icon */
 span span {
-  background: #ccc;
+  background: white;
+  border: solid 1px #ccc;
   border-radius: 3px;
   width: 100%;
   height: 100%;
@@ -340,8 +337,8 @@ span span {
 }
 
 /* checkbox icon (checked state) */
-input:checked + span { background: #777; }
-input:checked + span::before { display: block; content: '\2714'; }
+input:checked + span { sbackground: #777; }
+input:checked + span::before { display: block; content: ''; background: url("data:image/svg+xml,%3Csvg version='1.2' baseProfile='tiny' id='Layer_1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' x='0px' y='0px' width='24px' height='24px' viewBox='0 0 24 24' xml:space='preserve'%3E%3Cpath fill='%2356d256' d='M16.972,6.251c-0.967-0.538-2.185-0.188-2.72,0.777l-3.713,6.682l-2.125-2.125c-0.781-0.781-2.047-0.781-2.828,0 c-0.781,0.781-0.781,2.047,0,2.828l4,4C9.964,18.792,10.474,19,11,19c0.092,0,0.185-0.006,0.277-0.02 c0.621-0.087,1.166-0.46,1.471-1.009l5-9C18.285,8.005,17.937,6.788,16.972,6.251z'/%3E%3C/svg%3E") no-repeat center/95%;width: 100%; height: 100%; }
 
 /* checkbox input (hidden) */
 input[type=checkbox] {
@@ -356,8 +353,8 @@ input[type=checkbox] {
 }
 
 /* branch icons/actions... */
-.icons { display: inline-block; position: relative; margin-left: 5px; }
-svg { width: 18px; height: 18px; }
+.icons { margin-left: 5px; position: relative; top: 1px; float: right; }
+svg { width: 16px; height: 16px; margin-right: 2px; }
 
 /* ...loading */
 svg.loading { animation: spin .4s infinite linear; color: #999; }
@@ -365,5 +362,9 @@ svg.loading { animation: spin .4s infinite linear; color: #999; }
   0%  { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* ...others */
+.icons svg:not(.loading) { display: none; }
+.branch-bits:hover > label > .icons svg:not(.loading) { display: inline; }
 
 </style>

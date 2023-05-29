@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 export const globalSelected = ref(new Set());
 export const addToGlobalSelected = (id, emit) => {
   globalSelected.value.add(id);
