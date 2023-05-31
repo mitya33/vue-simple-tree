@@ -30,6 +30,7 @@
               <span>
                 <input
                   type='checkbox'
+                  :name='fieldName'
                   :value='item.id'
                   :checked='thisTreeStore.selected.has(item.id)'
                   @change='toggleInput(item.id)'
@@ -118,6 +119,10 @@ const props = defineProps({
   },
   filter: [String, RegExp, Function],
   search: Boolean,
+  fieldName: {
+    type: String,
+    default: 'item'
+  },
   invertFilter: Boolean,
   deselectAll: [String, Number, Boolean],
   admin: Boolean
@@ -126,13 +131,10 @@ const props = defineProps({
 //data mode - manual or API
 const dataMode = props.apiDomain && props.fetchEndpoint ? 'api' : 'manual';
 
-//item ID must be passed API mode
-if (dataMode == 'api' && !props.itemId) console.error('Item ID prop must be passed when using data from API');
-
 //if manual data, filter to those items that pertain to this depth
 const preselected = dataMode == 'api' || !props.preselected ?
   props.preselected :
-  props.preselected.filter(id => props.data.find(obj => obj.id.toString() === id));
+  props.preselected.filter(id => props.data.find(obj => obj.id === id));
 
 //selected/expanded state stores
 const thisTreeStore = ref({
@@ -147,8 +149,7 @@ const branchText = id => {
   if (el)
     ret = el.textContent;
   else {
-    const data = treeData.value;
-    const node = [jp.query(data, `$[?(@.id=="${id}")]`), jp.query(data, `$..*[?(@.id=="${id}")]`)].flat();
+    const node = getItemFromData(treeData.value, id);
     if (node[0]) ret = node[0][props.textProperty];
   }
   if (ret) return truncateTextOrNot(ret);
@@ -212,7 +213,7 @@ const filter = (item, forSearchTerm) => {
     return (
       !searchTerm.value ||
       matchesSearchTerm(item[props.textProperty]) ||
-      !!jp.query(treeData.value, `$[?(@.id=="${item.id}")]..*[?(/${searchTerm.value}/i.test(@.${props.textProperty}))]`).length
+      !!jp.query(treeData.value, `$[?(@.id=="${item.id}")]..[?(/${searchTerm.value}/i.test(@.${props.textProperty}))]`).length
     );
   else
     return (
@@ -247,15 +248,25 @@ const getData = new Promise(res => {
     res(props.data);
 });
 
-//...cast IDs to strings, for JSONPath usage
+//...if manual data, is root and item ID passed, reduce data to subset from that point
 getData.then(data => {
-  data.forEach(obj => obj.id = obj.id.toString());
+  if (!props.isChild && dataMode == 'manual' && props.itemId) {
+    data = getItemFromData(data, props.itemId);
+    if (!data.length || !data[0].children)
+      return console.error(`No such item with ID ${props.itemId} or it has no @children property`);
+    data = data[0].children;
+  }
+  console.log(data);
   treeData.value = data;
   if (props.isChild) hideTree.value = false;
 });
 
 //util - text matches search term?
 const matchesSearchTerm = text => text.toLowerCase().includes(searchTerm.value.toLowerCase())
+
+//util - get item by ID from manual data via JSONPath (from any depth)
+const getItemFromData = (data, id) =>
+  [jp.query(data, `$[?(@.id == '${props.itemId}')]`), jp.query(data, `$..[?(@.id == '${props.itemId}')]`)].flat();
 
 //branch finished loading API data
 const loadedData = (id, data) => {

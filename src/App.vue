@@ -19,10 +19,11 @@
 			:data='data'
 			:preselected='preselected'
 			:expandPreselected='false'
-			itemId='1'
+			itemId_='1'
 			:throttle='5'
 			textProperty_='title'
 			:textTruncate='30'
+			fieldName='tnm'
 		/>
 	</div>
 </template>
@@ -37,7 +38,7 @@ const fetchEndpoint = {
 	method: 'GET',
 	uri: 'posts?userId={id}'
 };
-const preselected = ['1', '11', '112'];
+const preselected = [1, '11', '112'];
 const data = [{
 	text: 'Features/config',
 	id: 0,
@@ -85,7 +86,7 @@ const data = [{
 			text: 'Tourism',
 			id: '122'
 		},{
-			text: 'Tourism',
+			text: 'Education',
 			id: '123'
 		}]
 	}
