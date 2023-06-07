@@ -1,6 +1,6 @@
 <template>
 	<div>
-		<h1 v-if='admin'>HLP taxonomy editor</h1>
+		<h1 v-if='admin'>Taxonomy editor</h1>
 		<template v-else>
 			<h1>Question editor</h1>
 			<label>Question text</label>
@@ -14,10 +14,11 @@
 			:admin='admin'
 			:mode='!admin ? "field" : "default"'
 			:search='true'
+			:leaves_='true'
 			:apiDomain_='apiDomain'
 			:fetchEndpoint_='fetchEndpoint'
 			:data='data'
-			:preselected='preselected'
+			:preselected_='preselected'
 			:expandPreselected='false'
 			itemId_='1'
 			:throttle='5'
@@ -95,5 +96,5 @@ const data = [{
 
 <style scoped>
 * { font-family: v-sans; }
-div { width: 500px; }
+div { width: 300px; }
 </style>

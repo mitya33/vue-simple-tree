@@ -9,7 +9,8 @@
     ".": {
       "import": "./dist/vue-simple-tree.es.js",
       "require": "./dist/vue-simple-tree.umd.js"
-    }
+    },
+    "./dist/style.css": "./dist/style.css"
   },
   "version": "0.0.1",
   "scripts": {

@@ -21,13 +21,14 @@
             :data-id='item.id'
             :class='{
               selected: globalSelected.has(item.id),
-              searchMatch: searchTerm && matchesSearchTerm(item[textProperty])
+              searchMatch: searchTerm && matchesSearchTerm(item[textProperty]),
+              isLeaf: !!branchText(item.id)
             }'
             v-if='filter(item)'
             v-show='filter(item, 1)'
           >
             <div class='branch-bits'>
-              <span>
+              <span v-show='!leafMode || !!branchText(item.id)'>
                 <input
                   type='checkbox'
                   :name='fieldName'
@@ -103,6 +104,7 @@ const props = defineProps({
     type: Boolean,
     default: true
   },
+  leaves: Boolean,
   textProperty: {
     type: String,
     default: 'text'
@@ -131,6 +133,9 @@ const props = defineProps({
 //data mode - manual or API
 const dataMode = props.apiDomain && props.fetchEndpoint ? 'api' : 'manual';
 
+//leaf mode? (Only if manual data)
+const leafMode = props.leaves && dataMode == 'manual';
+
 //if manual data, filter to those items that pertain to this depth
 const preselected = dataMode == 'api' || !props.preselected ?
   props.preselected :
@@ -145,12 +150,13 @@ const thisTreeStore = ref({
 //get branch text for selected item tag, either from tree (for API mode, as items selected) or from manual data
 const branchText = id => {
   let ret;
-  const el = tree.value.querySelector(`[data-id='${id}'] label .branch-text`);
-  if (el)
-    ret = el.textContent;
-  else {
+  if (dataMode == 'api') {
+    const el = tree.value.querySelector(`[data-id='${id}'] label .branch-text`);
+    if (el && (!leafMode || !el.closest('li').querySelector('li')))
+      ret = el.textContent;
+  } else {
     const node = getItemFromData(treeData.value, id);
-    if (node[0]) ret = node[0][props.textProperty];
+    if (node[0] && (!leafMode || !node[0].children)) ret = node[0][props.textProperty];
   }
   if (ret) return truncateTextOrNot(ret);
 }
@@ -266,7 +272,7 @@ const matchesSearchTerm = text => text.toLowerCase().includes(searchTerm.value.t
 
 //util - get item by ID from manual data via JSONPath (from any depth)
 const getItemFromData = (data, id) =>
-  [jp.query(data, `$[?(@.id == '${props.itemId}')]`), jp.query(data, `$..[?(@.id == '${props.itemId}')]`)].flat();
+  [jp.query(data, `$[?(@.id == '${id}')]`), jp.query(data, `$..[?(@.id == '${id}')]`)].flat();
 
 //branch finished loading API data
 const loadedData = (id, data) => {
@@ -350,15 +356,15 @@ ul.noBullets { list-style: none; }
 ul.isChild { padding-left: 16px; border-left: solid 1px #ccc; margin-left: 10px; }
 
 /* branch */
-li { margin-block: 5px; }
+li { margin-block: 10px; }
 .branch-bits { position: relative; width: fit-content; }
 .branch-bits::before {
   content: '';
   position: absolute;
   left: -4px;
-  top: -1px;
+  top: -3px;
   width: calc(100% + (4px * 2));
-  height: calc(100% + (1.5px * 2));
+  height: calc(100% + (3.6px * 2));
   border-radius: 4px;
   transition: .3s;
 }
